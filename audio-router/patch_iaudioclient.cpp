@@ -20,10 +20,18 @@ void tell_error(HRESULT hr)
     MessageBoxW(NULL, sts.str().c_str(), L"Routing Error", MB_ICONERROR);
 }
 
+// IAudioClient3 has 21 methods (indices 0-20). We allocate extra slots for metadata.
+const int IAUDIOCLIENT_METHODS = 21;
+const int METADATA_OLD_VTABLE = IAUDIOCLIENT_METHODS + 0;
+const int METADATA_DUPLICATE = IAUDIOCLIENT_METHODS + 1;
+const int METADATA_GUID      = IAUDIOCLIENT_METHODS + 2;
+const int METADATA_BLOCKALIGN= IAUDIOCLIENT_METHODS + 3;
+const int PATCHED_VTABLE_SIZE= IAUDIOCLIENT_METHODS + 4;
+
 DWORD_PTR* swap_vtable(IAudioClient* this_)
 {
     DWORD_PTR* old_vftptr = ((DWORD_PTR**)this_)[0];
-    ((DWORD_PTR**)this_)[0] = ((DWORD_PTR***)this_)[0][15];
+    ((DWORD_PTR**)this_)[0] = ((DWORD_PTR***)this_)[0][METADATA_OLD_VTABLE];
     return old_vftptr;
 }
 
@@ -31,8 +39,8 @@ HRESULT __stdcall release_patch(IAudioClient* this_)
 {
     iaudioclient_duplicate* dup = get_duplicate(this_);
     IAudioClient* proxy = dup->proxy;
-    GUID* arg = ((GUID***)this_)[0][17];
-    WORD* arg2 = ((WORD***)this_)[0][18];
+    GUID* arg = ((GUID***)this_)[0][METADATA_GUID];
+    WORD* arg2 = ((WORD***)this_)[0][METADATA_BLOCKALIGN];
     DWORD_PTR* old_vftptr = swap_vtable(this_);
     ULONG result = this_->Release();
     if(result == 0)
@@ -51,7 +59,7 @@ HRESULT __stdcall release_patch(IAudioClient* this_)
 
 iaudioclient_duplicate* get_duplicate(IAudioClient* this_)
 {
-    return ((iaudioclient_duplicate***)this_)[0][16];
+    return ((iaudioclient_duplicate***)this_)[0][METADATA_DUPLICATE];
 }
 
 HRESULT __stdcall initialize_patch(
@@ -69,11 +77,13 @@ HRESULT __stdcall initialize_patch(
     }
 
     IAudioClient* proxy = get_duplicate(this_)->proxy;
-    LPCGUID guid = ((GUID***)this_)[0][17];
+    LPCGUID guid = ((GUID***)this_)[0][METADATA_GUID];
     DWORD_PTR* old_vftptr = swap_vtable(this_);
     HRESULT hr = proxy->Initialize(
         ShareMode, 
         StreamFlags | 
+        AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM |
+        AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY |
         AUDCLNT_SESSIONFLAGS_EXPIREWHENUNOWNED | 
         AUDCLNT_SESSIONFLAGS_DISPLAY_HIDEWHENEXPIRED,
         hnsBufferDuration, 
@@ -84,7 +94,7 @@ HRESULT __stdcall initialize_patch(
     if(hr != S_OK)
         tell_error(hr);
     else
-        *((WORD***)this_)[0][18] = pFormat->nBlockAlign;
+        *((WORD***)this_)[0][METADATA_BLOCKALIGN] = pFormat->nBlockAlign;
     if(hr == S_OK)
     {
         for(iaudioclient_duplicate* next = get_duplicate(this_)->next;
@@ -154,7 +164,7 @@ HRESULT __stdcall getservice_patch(IAudioClient* this_, REFIID riid, void** ppv)
         if(riid == __uuidof(IAudioRenderClient))
         {
             IAudioRenderClient* host = *((IAudioRenderClient**)ppv);
-            patch_iaudiorenderclient(host, *((WORD***)this_)[0][18]);
+            patch_iaudiorenderclient(host, *((WORD***)this_)[0][METADATA_BLOCKALIGN]);
             for(iaudioclient_duplicate* next = get_duplicate(this_)->next; 
                 next != NULL; next = next->next)
             {
@@ -306,11 +316,12 @@ HRESULT __stdcall isformatsupported_patch(
 
 void patch_iaudioclient(IAudioClient* this_, LPGUID session_guid)
 {
-    // create new virtual table and save old and populate new with default
-    DWORD_PTR* old_vftptr = ((DWORD_PTR**)this_)[0]; // save old virtual table
-    // create new virtual table (slot 15 for old table ptr and 16 for duplicate)
-    ((DWORD_PTR**)this_)[0] = new DWORD_PTR[19];
-    memcpy(((DWORD_PTR**)this_)[0], old_vftptr, 15 * sizeof(DWORD_PTR));
+    // save old virtual table
+    DWORD_PTR* old_vftptr = ((DWORD_PTR**)this_)[0];
+    // allocate new virtual table large enough for IAudioClient3 + metadata
+    ((DWORD_PTR**)this_)[0] = new DWORD_PTR[PATCHED_VTABLE_SIZE];
+    // copy ALL original vtable entries to preserve extended interfaces (IAudioClient2/3)
+    memcpy(((DWORD_PTR**)this_)[0], old_vftptr, IAUDIOCLIENT_METHODS * sizeof(DWORD_PTR));
 
     // created duplicate object
     iaudioclient_duplicate* dup = new iaudioclient_duplicate(this_);
@@ -330,10 +341,10 @@ void patch_iaudioclient(IAudioClient* this_, LPGUID session_guid)
     vftptr[12] = (DWORD_PTR)reset_patch;
     vftptr[7] = (DWORD_PTR)isformatsupported_patch; // static
     vftptr[2] = (DWORD_PTR)release_patch;
-    //vftptr[0] = (DWORD_PTR)queryinterface_patch; // NEW
 
-    vftptr[15] = (DWORD_PTR)old_vftptr;
-    vftptr[16] = (DWORD_PTR)dup;
-    vftptr[17] = (DWORD_PTR)session_guid;
-    vftptr[18] = (DWORD_PTR)new WORD; // block align
+    // metadata stored BEYOND the IAudioClient3 vtable entries
+    vftptr[METADATA_OLD_VTABLE] = (DWORD_PTR)old_vftptr;
+    vftptr[METADATA_DUPLICATE] = (DWORD_PTR)dup;
+    vftptr[METADATA_GUID] = (DWORD_PTR)session_guid;
+    vftptr[METADATA_BLOCKALIGN] = (DWORD_PTR)new WORD; // block align
 }
