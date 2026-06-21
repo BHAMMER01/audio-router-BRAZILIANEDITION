@@ -78,10 +78,10 @@ LRESULT window::OnFileRefreshlist(WORD /*wNotifyCode*/, WORD /*wID*/, HWND /*hWn
 LRESULT window::OnAbout(WORD /*wNotifyCode*/, WORD /*wID*/, HWND /*hWndCtl*/, BOOL& /*bHandled*/)
 {
     this->MessageBoxW(
-        L"Audio Router version 0.10.2.\n" \
+        L"Audio Router 2026 by hammer brazilian edition based on Audio Router by audiorouterdev.\n" \
         L"\nIf you come across any bugs(especially relating to routing or duplicating), " \
         L"or just have an idea for a new feature, " \
-        L"please send a PM to the developer on reddit: reddit.com/user/audiorouterdev/", 
+        L"please send a PM to the original developer on reddit: reddit.com/user/audiorouterdev/", 
         L"About", MB_ICONINFORMATION);
     return 0;
 }
