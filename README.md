@@ -8,7 +8,47 @@ If you don't have a 64 bit OS, [here's the 32 bit version.](https://github.com/a
 
 [Here's a simple gif to show how it's used.](http://i.imgur.com/uq6ApMe.gif)
 
-For all feature requests/bugs/feedback, you can send me a  [PM.](https://www.reddit.com/message/compose/?to=audiorouterdev) I highly appreciate all of them. The thread is now archived, so unfortunately you can't reply to it anymore.
+For all feature requests/bugs/feedback, you can send me a  [PM.](https://www.reddit.com/message/compose/?to=audiorouterdev) I highly appreciate all of them. The thread is now archived, so unfortunately you can't reply to it anymore.  
+
+
+**Version 0.10.3  BRAZILIAN EDITIONof Audio Router released!**
+
+Modificações no patch_iaudioclient.cpp
+1. Constantes de layout da vtable (novas, linhas 23-29):
+
+const int IAUDIOCLIENT_METHODS = 21;  // IAudioClient3
+const int METADATA_OLD_VTABLE = 21;
+const int METADATA_DUPLICATE = 22;
+const int METADATA_GUID      = 23;
+const int METADATA_BLOCKALIGN= 24;
+const int PATCHED_VTABLE_SIZE= 25;
+Antes usava números mágicos 15, 16, 17, 18 e tamanho fixo 19.
+
+2. Vtable maior (patch_iaudioclient): Aloca 25 entries em vez de 19. Copia 21 entries da original em vez de 15 — isso preserva os métodos de IAudioClient2 (IsOffloadCapable, SetClientProperties, GetBufferSizeLimits) e IAudioClient3 (GetSharedModeEnginePeriod, GetCurrentSharedModeEnginePeriod, InitializeSharedAudioStream). Metadados vão pra posições 21-24, sem sobrescrever methods reais.
+
+3. swap_vtable, release_patch, get_duplicate: Atualizados pra usar as constantes ao invés de índices fixos [0][15], [0][16], [0][17], [0][18].
+
+4. initialize_patch: Adicionado AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM | AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY no Initialize do dispositivo principal (antes só nos duplicados).
+
+StreamFlags | 
+AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM |
+AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY |
+AUDCLNT_SESSIONFLAGS_EXPIREWHENUNOWNED | 
+AUDCLNT_SESSIONFLAGS_DISPLAY_HIDEWHENEXPIRED
+5. getservice_patch: Hardcoded [0][18] trocado por METADATA_BLOCKALIGN.
+
+Modificações no window.cpp
+6. About dialog: Versão atualizada e créditos adicionados:
+
+"Audio Router 2026 by hammer brazilian edition based on 
+ Audio Router by audiorouterdev."
+Modificações no audio-router-gui.rc
+7. String table / window title:
+
+"Audio Router 2026 by hammer brazilian edition"
+
+
+
 
 **Version 0.10.2 of Audio Router released!** Download it from the original links above. 
 
